@@ -1,4 +1,4 @@
-// epoll
+// epoll + ThreadPool
 
 #include <iostream>
 #include <string.h>
@@ -8,6 +8,7 @@
 #include <sys/epoll.h>
 #include <fcntl.h>
 #include <vector>
+#include "ThreadPool.h"
 
 #define MAX_EVENT_NUM 1024
 
@@ -43,6 +44,15 @@ int main()
 
     std::cout << "Server is listening..." << std::endl;
 
+    // ThreadPool
+    int notify_fd = eventfd(0, EFD_NONBLOCK);
+    ThreadPool pool(8, notify_fd);
+
+    epoll_event notify_event;
+    notify_event.data.fd = notify_fd;
+    notify_event.events = EPOLLIN;
+    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, notify_fd, &notify_event);
+
     for (;;)
     {
         int request_num = epoll_wait(epoll_fd, events.data(), MAX_EVENT_NUM, -1);
@@ -69,6 +79,30 @@ int main()
                 
                 std::cout << "new client connected!" << std::endl;
             }
+            else if (curr_fd == notify_fd)
+            {
+                uint64_t result_num;
+                read(curr_fd, &result_num, sizeof(result_num));
+
+                for (uint64_t i = 0; i < result_num; i += 1)
+                {
+                    std::unique_lock<std::mutex> lock(pool.result_mutex);
+                    
+                    if(pool.result_queue.empty())
+                    {
+                        lock.unlock();
+                        break;
+                    }
+
+                    Result result = pool.result_queue.front();
+                    pool.result_queue.pop();
+                    lock.unlock();
+                    send(result.fd, result.data.data(), result.data.length(), 0);
+
+                    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, result.fd, NULL);
+                    close(result.fd);
+                }
+            }
             else if (events[i].events & EPOLLIN)
             {
                 char buffer[64] = {0};
@@ -77,10 +111,9 @@ int main()
                 if (buf_stat > 0)
                 {
                     std::cout << "receive: " << buffer;
-                    send(curr_fd, buffer, strlen(buffer), 0);
+                    Task task(curr_fd, buffer);
 
-                    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, curr_fd, NULL);
-                    close(curr_fd);
+                    pool.enqueue(task);  
                 }
                 else if (buf_stat == 0)
                 {
