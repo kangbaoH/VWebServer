@@ -8,12 +8,14 @@
 #include <sys/epoll.h>
 #include <fcntl.h>
 #include <vector>
-#include "ThreadPool.h"
+#include "./ThreadPool/ThreadPool.h"
+#include "./Connection/Connection.h"
 
 #define MAX_EVENT_NUM 1024
 
 int main()
 {
+    std::vector<Connection> connections(65535);
     //create epoll
     int epoll_fd = epoll_create1(0);
 
@@ -59,11 +61,11 @@ int main()
 
         for (int i = 0; i < request_num; i += 1)
         {
-            int curr_fd = events[i].data.fd;
+            epoll_event curr_event = events[i];    //current event
 
-            if (curr_fd == listen_fd)   // accept new connection                     
+            if (curr_event.data.fd == listen_fd)   // accept new connection                     
             {   
-                epoll_event new_connection_event;
+                epoll_event new_conn_event;
 
                 struct sockaddr_in client_addr;
                 socklen_t client_len = sizeof(client_addr);
@@ -72,55 +74,62 @@ int main()
                 int flag = fcntl(conn_fd, F_GETFL, 0);
                 fcntl(conn_fd, F_SETFL, flag | O_NONBLOCK);
 
-                new_connection_event.data.fd = conn_fd;
-                new_connection_event.events = EPOLLIN | EPOLLONESHOT;
+                new_conn_event.data.fd = conn_fd;
+                new_conn_event.events = EPOLLIN | EPOLLONESHOT;
 
-                epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn_fd, &new_connection_event);
-                
+                epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn_fd, &new_conn_event);
+
+                connections[conn_fd].init(conn_fd);
+
                 std::cout << "new client connected!" << std::endl;
             }
-            else if (curr_fd == notify_fd)  // get processed result and send to client
-            {
+            else if (curr_event.data.fd == notify_fd)  // get processed result
+            {                                          // and send to client
                 uint64_t result_num;
-                read(curr_fd, &result_num, sizeof(result_num));
+                read(curr_event.data.fd, &result_num, sizeof(result_num));
 
                 for (uint64_t i = 0; i < result_num; i += 1)
                 {
-                    Result result(-1, "");
-                    
-                    {
+                    Connection *result_connection;
+                    {                      
                         std::unique_lock<std::mutex> lock(pool.result_mutex);
                         if(pool.result_queue.empty())
                             break;
-                        result = pool.result_queue.front();
+                        result_connection = pool.result_queue.front();
                         pool.result_queue.pop();
                     }
 
-                    send(result.fd, result.data.data(), result.data.length(), 0);
-                    
+                    send(result_connection->get_fd(),
+                         result_connection->get_write_buffer_data(),
+                         result_connection->get_write_buffer_len(), 0);
+
+                    result_connection->clear_write_buffer();
+
                     // persistent connection
                     epoll_event rearm_conn_event;
                     rearm_conn_event.events = EPOLLIN | EPOLLONESHOT;
-                    rearm_conn_event.data.fd = result.fd;
-                    epoll_ctl(epoll_fd, EPOLL_CTL_MOD, result.fd, &rearm_conn_event);
+                    rearm_conn_event.data.fd = result_connection->get_fd();
+                    epoll_ctl(epoll_fd, EPOLL_CTL_MOD, result_connection->get_fd(),
+                              &rearm_conn_event);
                 }
             }
-            else if (events[i].events & EPOLLIN)    // read data and hand to worker thread
+            else if (curr_event.events & EPOLLIN)    // read data and hand to worker thread
             {
-                char buffer[64] = {0};
-                ssize_t buf_stat = read(curr_fd, (void *)buffer, sizeof(buffer) - 1);
+                char buffer[1024] = {0};
+                ssize_t buf_stat = read(curr_event.data.fd, (void *)buffer, sizeof(buffer) - 1);
 
                 if (buf_stat > 0)
                 {
+                    connections[curr_event.data.fd].write2read_buffer(buffer);
                     std::cout << "receive: " << buffer;
-                    Task task(curr_fd, buffer);
 
-                    pool.enqueue(task);  
+                    pool.enqueue(&connections[events[i].data.fd]);
                 }
                 else if (buf_stat == 0)
                 {
-                    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, curr_fd, NULL);
-                    close(curr_fd);
+                    // 资源释放待添加
+                    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, curr_event.data.fd, NULL);
+                    close(curr_event.data.fd);
                     std::cout << "Connection closed by foreign host." << std::endl;
                 }
                 else
@@ -128,8 +137,8 @@ int main()
                     if (errno != EAGAIN &&errno != EWOULDBLOCK)
                     {
                         std::cout << "read error" << std::endl;
-                        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, curr_fd, NULL);
-                        close(curr_fd);
+                        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, curr_event.data.fd, NULL);
+                        close(curr_event.data.fd);
                     }
                 }
             }

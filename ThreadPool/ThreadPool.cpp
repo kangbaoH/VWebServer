@@ -1,9 +1,5 @@
 #include "ThreadPool.h"
 
-Task::Task(int task_fd, const std::string &task_data) : fd(task_fd), data(task_data) {}
-
-Result::Result(int task_fd, const std::string &task_data) : fd(task_fd), data(task_data) {}
-
 ThreadPool::ThreadPool(int threads_num, int event_fd) : stop(0), notify_fd(event_fd)
 {
     for (int i = 0; i < threads_num; i += 1)
@@ -12,8 +8,8 @@ ThreadPool::ThreadPool(int threads_num, int event_fd) : stop(0), notify_fd(event
                                       {                    
                     for (;;)
                     {
-                        Task curr_task(-1, "");
-                        
+                        Connection *curr_task;
+
                         {
                             std::unique_lock<std::mutex> lock(queue_mutex);
 
@@ -27,12 +23,15 @@ ThreadPool::ThreadPool(int threads_num, int event_fd) : stop(0), notify_fd(event
                             task_queue.pop();
                         }
 
-                        Result curr_result(curr_task.fd, curr_task.data);
-                        
+                        /****************/
+                        /* process data */
+                        curr_task->process();
+                        /****************/
+
                         {
                             std::unique_lock<std::mutex> result_lock(result_mutex);
 
-                            result_queue.push(curr_result);
+                            result_queue.push(curr_task);
                         }
 
                         uint64_t one = 1;
@@ -41,7 +40,7 @@ ThreadPool::ThreadPool(int threads_num, int event_fd) : stop(0), notify_fd(event
     }
 }
 
-void ThreadPool::enqueue(Task new_task)
+void ThreadPool::enqueue(Connection* new_task)
 {
     {    
         std::unique_lock<std::mutex> lock(queue_mutex);
