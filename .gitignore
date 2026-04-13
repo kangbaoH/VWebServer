@@ -1,4 +1,4 @@
 # .gitignore
 *.out
 *.o
-Server
+server
