@@ -86,6 +86,10 @@ private:
     int version_;
 
 public:
+    int prev_in_timerwheel;
+    int next_in_timerwheel;
+    int position_in_timerwheel;
+
     Connection();
 
     void init(int client_fd);

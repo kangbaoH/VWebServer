@@ -8,8 +8,10 @@
 #include <sys/epoll.h>
 #include <fcntl.h>
 #include <vector>
+#include <sys/timerfd.h>
 #include "./ThreadPool/ThreadPool.h"
 #include "./Connection/Connection.h"
+#include "./TimerWheel/TimerWheel.h"
 
 #define MAX_EVENT_NUM 1024
 
@@ -55,6 +57,22 @@ int main()
     notify_event.events = EPOLLIN;
     epoll_ctl(epoll_fd, EPOLL_CTL_ADD, notify_fd, &notify_event);
 
+    // TimerWheel
+    int timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+    struct itimerspec its;
+    memset(&its, 0, sizeof(its));
+    its.it_interval.tv_sec = 1;
+    its.it_value.tv_sec = 1;
+    timerfd_settime(timer_fd, 0, &its, nullptr);
+
+    epoll_event timer_event;
+    timer_event.data.fd = timer_fd;
+    timer_event.events = EPOLLIN | EPOLLET;
+    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, timer_fd, &timer_event);
+
+    TimerWheel timer;
+    timer.init(60, connections.data());
+
     for (;;)
     {
         int request_num = epoll_wait(epoll_fd, events.data(), MAX_EVENT_NUM, -1);
@@ -86,6 +104,8 @@ int main()
 
                         connections[conn_fd].init(conn_fd);
 
+                        timer.add(conn_fd);
+
                         std::cout << "new client connected! client fd: " << 
                             conn_fd << std::endl;
                     }
@@ -106,7 +126,7 @@ int main()
             else if (curr_event.data.fd == notify_fd)  // get processed result
             {                                          // and send to client
                 uint64_t result_num;
-                if ((read(curr_event.data.fd, &result_num, sizeof(result_num))) == -1)
+                if ((read(curr_event.data.fd, &result_num, sizeof(result_num))) < 0)
                 {
                     if (errno != EAGAIN && errno != EWOULDBLOCK)
                     {    
@@ -133,6 +153,7 @@ int main()
                         rearm_conn_event.data.fd = result_connection->fd();
                         epoll_ctl(epoll_fd, EPOLL_CTL_MOD, result_connection->fd(),
                                   &rearm_conn_event);
+                        timer.add(result_connection->fd());
                     }
                     else if(result_connection->state() == ConnectionState::WRITE)
                     {
@@ -151,6 +172,7 @@ int main()
                                 rearm_conn_event.data.fd = result_connection->fd();
                                 epoll_ctl(epoll_fd, EPOLL_CTL_MOD, result_connection->fd(),
                                           &rearm_conn_event);
+                                timer.add(result_connection->fd());
                             }
                         }
                         else if (write_state == WriteState::WRITE_AGAIN)
@@ -166,8 +188,8 @@ int main()
                             epoll_ctl(epoll_fd, EPOLL_CTL_DEL,
                                       result_connection->fd(), NULL);
                             close(result_connection->fd());
-                            std::cout << "close. client fd: " << result_connection->fd() << 
-                                std::endl;
+                            timer.remove(result_connection->fd());
+                            std::cout << "close. client fd: " << result_connection->fd() << std::endl;
                         }
                     }
                     else if(result_connection->state() == ConnectionState::CLOSE)
@@ -175,12 +197,25 @@ int main()
                         epoll_ctl(epoll_fd, EPOLL_CTL_DEL,
                                   result_connection->fd(), NULL);
                         close(result_connection->fd());
+                        timer.remove(result_connection->fd());
                         std::cout << "Request error, close connection. fd: " << 
                             result_connection->fd() << std::endl;
                     }
                 }
             }
-            else if (curr_event.events & EPOLLOUT)
+            else if (curr_event.data.fd == timer_fd)
+            {
+                uint64_t expirations;
+                if (read(timer_fd, &expirations, sizeof(expirations)) < 0)
+                {
+                    expirations = 0;
+                }
+                while (expirations-- > 0)
+                {
+                    timer.tick(epoll_fd);
+                }
+            }
+            else if (curr_event.events & EPOLLOUT)//上面的不会有epollout吗
             {
                 WriteState write_state = connections[curr_event.data.fd].process_write();
 
@@ -198,13 +233,24 @@ int main()
                         rearm_conn_event.data.fd = curr_event.data.fd;
                         epoll_ctl(epoll_fd, EPOLL_CTL_MOD, curr_event.data.fd,
                                   &rearm_conn_event);
+                        timer.add(curr_event.data.fd);
                     }
                 }
-                else if (write_state == WriteState::WRITE_CLOSE || 
-                    write_state == WriteState::WRITE_ERROR)
+                else if (write_state == WriteState::WRITE_CLOSE)
                 {
                     epoll_ctl(epoll_fd, EPOLL_CTL_DEL, curr_event.data.fd, NULL);
                     close(curr_event.data.fd);
+                    timer.remove(curr_event.data.fd);
+                    std::cout << "Write done, close connection. fd:" << 
+                        curr_event.data.fd << std::endl;
+                }
+                else if (write_state == WriteState::WRITE_ERROR)
+                {
+                    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, curr_event.data.fd, NULL);
+                    close(curr_event.data.fd);
+                    timer.remove(curr_event.data.fd);
+                    std::cout << "Write error, close connection. fd:" 
+                        << curr_event.data.fd << std::endl;
                 }
             }
             else if (curr_event.events & EPOLLIN)    // read data and hand to worker thread
@@ -214,16 +260,20 @@ int main()
                 ssize_t read_bytes;
                 for (;;)
                 {
+                    timer.remove(curr_event.data.fd);
+
                     read_bytes = read(curr_event.data.fd, (void *)buffer, sizeof(buffer) - 1);
 
                     if (read_bytes > 0)
                     {
+                        
                         connections[curr_event.data.fd].append_to_read_buffer(buffer, read_bytes);
                     }
                     else if (read_bytes == 0)
                     {
                         epoll_ctl(epoll_fd, EPOLL_CTL_DEL, curr_event.data.fd, NULL);
                         close(curr_event.data.fd);
+                        timer.remove(curr_event.data.fd);
                         std::cout << "Connection closed by peer. client fd: " << 
                             curr_event.data.fd << std::endl;
                         break;
@@ -240,6 +290,7 @@ int main()
                         {
                             epoll_ctl(epoll_fd, EPOLL_CTL_DEL, curr_event.data.fd, NULL);
                             close(curr_event.data.fd);
+                            timer.remove(curr_event.data.fd);
                             std::cout << "Connection closed by peer. client fd: " << 
                                 curr_event.data.fd << std::endl;
                             break;
@@ -250,6 +301,7 @@ int main()
                                 curr_event.data.fd << std::endl;
                             epoll_ctl(epoll_fd, EPOLL_CTL_DEL, curr_event.data.fd, NULL);
                             close(curr_event.data.fd);
+                            timer.remove(curr_event.data.fd);
                             break;
                         }
                     }

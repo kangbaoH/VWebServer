@@ -18,6 +18,10 @@ void Connection::init(int client_fd)
     strcpy(resource_path, "/home/verta/MyServer/Resources");
 
     version_ += 1;
+
+    prev_in_timerwheel = -1;
+    next_in_timerwheel = -1;
+    position_in_timerwheel = -1;
 }
 
 void Connection::append_to_read_buffer(char *buffer, size_t len)
