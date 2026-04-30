@@ -16,4 +16,4 @@ WORKDIR /app
 
 EXPOSE 8080
 
-CMD ["bin/bash"]
+CMD ["/bin/bash"]
