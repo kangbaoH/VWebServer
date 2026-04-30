@@ -1,4 +1,4 @@
-FROM Ubantu:22.04
+FROM ubantu:22.04
 
 ENV DEBIAN_FROMTEND=noninteractive
 
