@@ -16,7 +16,7 @@ void Connection::init(int client_fd)
     m_linger = true;
 
     memset(resource_path, '\0', RESOURCE_PATH_MAXLEN);
-    strcpy(resource_path, "/home/verta/MyServer/Resources");
+    strcpy(resource_path, "/home/verta/VServer/Resources");
 
     version_ += 1;
 
@@ -386,5 +386,5 @@ void Connection::reset_state()
     m_linger = false;
 
     memset(resource_path, '\0', RESOURCE_PATH_MAXLEN);
-    strcpy(resource_path, "/home/verta/MyServer/Resources");
+    strcpy(resource_path, "/home/verta/VServer/Resources");
 }
