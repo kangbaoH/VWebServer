@@ -1,12 +1,13 @@
 #pragma once
 
+#include <iostream>
 #include <string>
 #include <cstring>
 #include <cstdlib>
-#include <sys/stat.h>
 #include <fcntl.h>
-#include <sys/mman.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
 #include <sys/uio.h>
 
 enum class LineState
@@ -57,6 +58,7 @@ public:
     size_t len;
 };
 
+#define CURRENT_PATH_MAXLEN 200
 #define RESOURCE_PATH_MAXLEN 200
 
 class Connection

@@ -15,8 +15,18 @@ void Connection::init(int client_fd)
 
     m_linger = true;
 
-    memset(resource_path, '\0', RESOURCE_PATH_MAXLEN);
-    strcpy(resource_path, "/home/verta/VServer/Resources");
+    char current_dir[CURRENT_PATH_MAXLEN];
+    memset(current_dir, '\0', CURRENT_PATH_MAXLEN);
+    if (getcwd(current_dir, CURRENT_PATH_MAXLEN) == nullptr)
+    {
+        std::cout << "get current path failed.\n";
+    }
+    else
+    {
+        memset(resource_path, '\0', RESOURCE_PATH_MAXLEN);
+        strcpy(resource_path, current_dir);
+        strcpy(resource_path + strlen(current_dir), "/Resources");
+    }
 
     version_ += 1;
 
@@ -385,6 +395,16 @@ void Connection::reset_state()
 
     m_linger = false;
 
-    memset(resource_path, '\0', RESOURCE_PATH_MAXLEN);
-    strcpy(resource_path, "/home/verta/VServer/Resources");
+    char current_dir[CURRENT_PATH_MAXLEN];
+    memset(current_dir, '\0', CURRENT_PATH_MAXLEN);
+    if (getcwd(current_dir, CURRENT_PATH_MAXLEN) == nullptr)
+    {
+        std::cout << "get current path failed.\n";
+    }
+    else
+    {
+        memset(resource_path, '\0', RESOURCE_PATH_MAXLEN);
+        strcpy(resource_path, current_dir);
+        strcpy(resource_path + strlen(current_dir), "/Resources");
+    }
 }
