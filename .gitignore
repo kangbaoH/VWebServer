@@ -3,4 +3,5 @@
 *.o
 server
 .gdbinit
-server.log
+Logs/*
+!Logs/.gitkeep

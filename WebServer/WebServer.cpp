@@ -106,7 +106,7 @@ void WebServer::logger_init(std::string filename, Level level)
 
 void WebServer::start(int port, int thread_nums, int timeout, int max_connection_num)
 {
-    logger_init("server.log", Level::DEBUG);
+    logger_init("Logs", Level::DEBUG);
 
     _max_connection_num = max_connection_num;
     connections.resize(_max_connection_num);

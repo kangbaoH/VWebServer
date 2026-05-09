@@ -8,6 +8,8 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <algorithm>
+#include <sys/stat.h>
 
 enum class Level
 {
@@ -30,7 +32,7 @@ private:
     std::string current_time();
 
 public:
-    int init(const std::string &filename, Level level);
+    int init(const std::string &log_dir, Level level);
     void log(Level level, const std::string &filename, int line,
              const std::string &msg);
     static Logger &instance();

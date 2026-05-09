@@ -49,13 +49,28 @@ std::string Logger::current_time()
     return oss.str();
 }
 
-int Logger::init(const std::string& filename, Level level)
+int Logger::init(const std::string& log_dir, Level level)
 {
-    file.open(filename, std::ios::app);
+    mkdir(log_dir.c_str(), 0755);
+
+    std::ostringstream filename;
+
+    std::string time = current_time();
+    std::replace(time.begin(), time.end(), ' ', '_');
+    std::replace(time.begin(), time.end(), ':', '-');
+    size_t dot_pos = time.find('.');
+    if (dot_pos != std::string::npos)
+    {
+        time.erase(dot_pos);
+    }
+
+    filename << log_dir << "/server_" << time << ".log";
+
+    file.open(filename.str(), std::ios::app);
 
     if(!file.is_open())
     {
-        std::cout << "open " << filename << " failed.\n";
+        std::cout << "open " << filename.str() << " failed.\n";
         return -1;
     }
 
