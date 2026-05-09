@@ -40,7 +40,7 @@ public:
     void listen_init(int port);
     void threadpool_init(int thread_nums);
     void timer_init(int timeout);
-    void logger_init(std::string filename, Level level);
+    void logger_init(std::string filename, Level level, size_t file_size);
 
     void start(int port, int thread_nums, int timeout, int max_connection_num);
 

@@ -90,14 +90,9 @@ void WebServer::timer_init(int timeout)
     timer.init(timeout, connections.data());
 }
 
-void WebServer::logger_init(std::string filename, Level level)
+void WebServer::logger_init(std::string filename, Level level,size_t file_size)
 {
-    // char cwd[MAX_CWD_LEN];
-    // getcwd(cwd, MAX_CWD_LEN);
-    // filename = "/" + filename;
-    // filename = cwd + filename;
-
-    if (Logger::instance().init(filename, level) < 0)
+    if (Logger::instance().init(filename, level, file_size) < 0)
     {
         std::cout << "Failed to init logger!\n";
         exit(1);
@@ -106,7 +101,7 @@ void WebServer::logger_init(std::string filename, Level level)
 
 void WebServer::start(int port, int thread_nums, int timeout, int max_connection_num)
 {
-    logger_init("Logs", Level::DEBUG);
+    logger_init("Logs", Level::DEBUG, 10 * 1024 * 1024);
 
     _max_connection_num = max_connection_num;
     connections.resize(_max_connection_num);

@@ -77,7 +77,8 @@ void ThreadPool::enqueue(Task new_task)
 
 ThreadPool::~ThreadPool()
 {
-    stop = 1;
+    stop = true;
+    
     condition.notify_all();
     for (auto &worker : workers)
     {

@@ -9,6 +9,9 @@
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
+#include <condition_variable>
+#include <queue>
+#include <thread>
 #include <sys/stat.h>
 
 enum class Level
@@ -26,13 +29,23 @@ private:
     std::ofstream file;
     Level log_level;
 
-    std::mutex _mutex;
+    size_t max_file_size;
+    size_t current_file_size;
+    int roll_index;
+    std::string log_dir;
+
+    std::thread worker;
+    std::queue<std::string> log_queue;
+    std::condition_variable condition;
+    bool stop = false;
+
+    std::mutex queue_mutex;
 
     std::string level_to_str(Level level);
     std::string current_time();
 
 public:
-    int init(const std::string &log_dir, Level level);
+    int init(const std::string &log_dir, Level level, size_t file_size);
     void log(Level level, const std::string &filename, int line,
              const std::string &msg);
     static Logger &instance();
