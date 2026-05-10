@@ -69,6 +69,8 @@ private:
     std::string read_buffer;
     std::string write_buffer;
 
+    std::string error_body;
+
     CheckState m_check_state;
 
     int check_index;
@@ -120,7 +122,11 @@ public:
 
     HttpCode process_read();
 
-    void make_response();
+    void make_response(HttpCode code);
+
+    void make_file_response();
+
+    void make_error_response(int code, const std::string &text, const std::string &msg);
 
     HttpCode do_request();
 

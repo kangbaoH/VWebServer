@@ -34,18 +34,24 @@ void ThreadPool::init(int threads_num, int event_fd)
 
                         // process data
                         HttpCode http_code = curr_task.connection->process_read();
-                        if (http_code == HttpCode::NO_REQUEST)
+                        switch (http_code)
                         {
-                            curr_task.connection->set_connection_state(ConnectionState::READ);
+                            case HttpCode::NO_REQUEST:
+                                curr_task.connection->set_connection_state(ConnectionState::READ);
+                                break;
+
+                            case HttpCode::FILE_REQUEST:
+                            case HttpCode::NO_RESOURCE:
+                            case HttpCode::FORBIDDEN_REQUEST:
+                            case HttpCode::INTERNAL_ERROR:
+                            case HttpCode::BAD_REQUEST:
+                                curr_task.connection->set_connection_state(ConnectionState::WRITE);
+                                break;
+
+                            default:
+                                curr_task.connection->set_connection_state(ConnectionState::CLOSE);
                         }
-                        else if (http_code == HttpCode::FILE_REQUEST)
-                        {
-                            curr_task.connection->set_connection_state(ConnectionState::WRITE);
-                        }
-                        else
-                        {
-                            curr_task.connection->set_connection_state(ConnectionState::CLOSE);
-                        }
+                
 
                         {
                             std::unique_lock<std::mutex> result_lock(result_mutex);

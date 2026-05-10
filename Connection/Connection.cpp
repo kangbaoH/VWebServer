@@ -7,6 +7,7 @@ void Connection::init(int client_fd)
     fd_ = client_fd;
     read_buffer.clear();
     write_buffer.clear();
+    error_body.clear();
 
     m_check_state = CheckState::REQUEST_LINE;
 
@@ -201,19 +202,18 @@ HttpCode Connection::process_read()
         switch (m_check_state)
         {
         case CheckState::REQUEST_LINE:
-        {
             if ((ret = parse_request_line(text)) == HttpCode::BAD_REQUEST)
             {
+                make_response(ret);
                 return ret;
             }
             m_check_state = CheckState::HEADERS;
-            break;
-        }
+            break;      
         case CheckState::HEADERS:
-        {
             ret = parse_headers(text);
             if (ret == HttpCode::BAD_REQUEST)
             {
+                make_response(ret);
                 return ret;
             }
             else if (ret == HttpCode::GET_REQUEST)
@@ -222,12 +222,11 @@ HttpCode Connection::process_read()
                 return do_request();
             }
             break;
-        }
         case CheckState::BODY:
-        {
             ret = parse_body(text);
             if (ret == HttpCode::BAD_REQUEST)
             {
+                make_response(ret);
                 return ret;
             }
             else if (ret == HttpCode::GET_REQUEST)
@@ -237,11 +236,9 @@ HttpCode Connection::process_read()
             }
             line_state = LineState::LINE_OPEN;
             break;
-        };
-        default:
-        {
+        default:      
+            make_response(ret);
             return HttpCode::INTERNAL_ERROR;
-        }
         }
     }
 
@@ -252,7 +249,33 @@ HttpCode Connection::process_read()
     return ret;
 }
 
-void Connection::make_response()
+void Connection::make_response(HttpCode code)
+{
+    switch(code)
+    {
+    case HttpCode::FILE_REQUEST:
+        make_file_response();
+        break;
+    case HttpCode::NO_RESOURCE:
+        make_error_response(404, "Not Found",
+                            "The requested resource was not found on this server.");
+        break;
+    case HttpCode::FORBIDDEN_REQUEST:
+        make_error_response(403, "Forbidden",
+                            "You do not have permission to access this resource.");
+        break;
+    case HttpCode::INTERNAL_ERROR:
+        make_error_response(500, "Internal Server Error",
+                            "The server encountered an internal error.");
+        break;
+    case HttpCode::BAD_REQUEST:
+        make_error_response(400, "Bad Request",
+                            "Your request has bad syntax.");
+        break;
+    }
+}
+
+void Connection::make_file_response()
 {
     write_buffer += "HTTP/1.1 200 OK\r\n";
     write_buffer += "Content-Type: text/html\r\n";
@@ -272,6 +295,47 @@ void Connection::make_response()
     iovs[0].iov_len = write_buffer.length();
     iovs[1].iov_base = file_address;
     iovs[1].iov_len = file_stat.st_size;
+}
+
+void Connection::make_error_response(int code, const std::string &text, const std::string &msg)
+{
+    error_body += "<html><head><title>";
+    error_body += std::to_string(code) + " " + text;
+    error_body += "</title></head>";
+    error_body += "<body style='font-family: sans-serif; text-align:center; margin-top:80px;'>";
+    error_body += "<h1>";
+    error_body += std::to_string(code) + " " + text;
+    error_body += "</h1>";
+    error_body += "<p>";
+    error_body += msg;
+    error_body += "</p>";
+    error_body += "<hr><p>C++ Web Server</p>";
+    error_body += "</body></html>";
+    // make error_body first, then it's size can be obtained when make headers in write_buffer 
+    
+    write_buffer += "HTTP/1.1 ";
+    write_buffer += std::to_string(code);
+    write_buffer += " ";
+    write_buffer += text;
+    write_buffer += "\r\n";
+
+    write_buffer += "Content-Type: text/html\r\n";
+    write_buffer += "Content-Length: " + std::to_string(error_body.size()) + "\r\n";
+    write_buffer += "Connection: ";
+    if (m_linger)
+    {
+        write_buffer += "keep-alive\r\n";
+    }
+    else
+    {
+        write_buffer += "close\r\n";
+    }
+    write_buffer += "\r\n";
+
+    iovs[0].iov_base = (void *)write_buffer.data();
+    iovs[0].iov_len = write_buffer.length();
+    iovs[1].iov_base = (void *)error_body.data();
+    iovs[1].iov_len = error_body.length();
 }
 
 HttpCode Connection::do_request()
@@ -296,20 +360,24 @@ HttpCode Connection::do_request()
 
     if (stat(resource_path, &file_stat) < 0)
     {
+        make_response(HttpCode::NO_RESOURCE);
         return HttpCode::NO_RESOURCE;
     }
     if (S_ISDIR(file_stat.st_mode))
     {
+        make_response(HttpCode::BAD_REQUEST);
         return HttpCode::BAD_REQUEST;
     }
     if (!(file_stat.st_mode & S_IROTH))
     {
+        make_response(HttpCode::FORBIDDEN_REQUEST);
         return HttpCode::FORBIDDEN_REQUEST;
     }
 
     int fd = open(resource_path, O_RDONLY);
     if (fd < 0)
     {
+        make_response(HttpCode::NO_RESOURCE);
         return HttpCode::NO_RESOURCE;
     }
 
@@ -320,10 +388,11 @@ HttpCode Connection::do_request()
 
     if (file_address == MAP_FAILED)
     {
+        make_response(HttpCode::INTERNAL_ERROR);
         return HttpCode::INTERNAL_ERROR;
     }
 
-    make_response();
+    make_response(HttpCode::FILE_REQUEST);
     return HttpCode::FILE_REQUEST;
 }
 
@@ -390,6 +459,7 @@ void Connection::reset_state()
     }
 
     write_buffer.clear();
+    error_body.clear();
 
     m_check_state = CheckState::REQUEST_LINE;
 

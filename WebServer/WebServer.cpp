@@ -90,9 +90,9 @@ void WebServer::timer_init(int timeout)
     timer.init(timeout, connections.data());
 }
 
-void WebServer::logger_init(std::string filename, Level level,size_t file_size)
+void WebServer::logger_init(std::string dir, Level level,size_t file_size)
 {
-    if (Logger::instance().init(filename, level, file_size) < 0)
+    if (Logger::instance().init(dir, level, file_size) < 0)
     {
         std::cout << "Failed to init logger!\n";
         exit(1);
