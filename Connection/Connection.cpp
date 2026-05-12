@@ -8,6 +8,7 @@ void Connection::init(int client_fd)
     read_buffer.clear();
     write_buffer.clear();
     error_body.clear();
+    post_body.clear();
 
     m_check_state = CheckState::REQUEST_LINE;
 
@@ -15,6 +16,10 @@ void Connection::init(int client_fd)
     start_index = 0;
 
     m_linger = true;
+
+    m_content_length = 0;
+
+    file_address = nullptr;
 
     char current_dir[CURRENT_PATH_MAXLEN];
     memset(current_dir, '\0', CURRENT_PATH_MAXLEN);
@@ -127,11 +132,12 @@ HttpCode Connection::parse_headers(char *text)
 
     if (text[0] == '\0')
     {
-        if (read_buffer.compare(m_method.pos, m_method.len, "GET") == 0)
+        if (compare_readbuffer_substr(m_method, "GET") == 0 ||
+            compare_readbuffer_substr(m_method, "HEAD") == 0)
         {
-            return HttpCode::GET_REQUEST;
+            return HttpCode::REQUEST_READY;
         }
-        else if (read_buffer.compare(m_method.pos, m_method.len, "POST") == 0)
+        else if (compare_readbuffer_substr(m_method, "POST") == 0)
         {
             m_check_state = CheckState::BODY;
             return HttpCode::NO_REQUEST;
@@ -184,7 +190,7 @@ HttpCode Connection::parse_body(char *text)
     m_content.pos = text - &read_buffer[0];
     m_content.len = m_content_length;
 
-    return HttpCode::GET_REQUEST;
+    return HttpCode::REQUEST_READY;
 }
 
 HttpCode Connection::process_read()
@@ -216,7 +222,7 @@ HttpCode Connection::process_read()
                 make_response(ret);
                 return ret;
             }
-            else if (ret == HttpCode::GET_REQUEST)
+            else if (ret == HttpCode::REQUEST_READY)
             {
                 m_check_state = CheckState::FINISH;
                 return do_request();
@@ -229,12 +235,15 @@ HttpCode Connection::process_read()
                 make_response(ret);
                 return ret;
             }
-            else if (ret == HttpCode::GET_REQUEST)
+            else if (ret == HttpCode::REQUEST_READY)
             {
                 m_check_state = CheckState::FINISH;
                 return do_request();
             }
-            line_state = LineState::LINE_OPEN;
+            else if (ret == HttpCode::NO_REQUEST)
+            {
+                return ret;
+            }
             break;
         default:      
             make_response(ret);
@@ -255,6 +264,9 @@ void Connection::make_response(HttpCode code)
     {
     case HttpCode::FILE_REQUEST:
         make_file_response();
+        break;
+    case HttpCode::ECHO_REQUEST:
+        make_post_response();
         break;
     case HttpCode::NO_RESOURCE:
         make_error_response(404, "Not Found",
@@ -278,7 +290,9 @@ void Connection::make_response(HttpCode code)
 void Connection::make_file_response()
 {
     write_buffer += "HTTP/1.1 200 OK\r\n";
-    write_buffer += "Content-Type: text/html\r\n";
+    write_buffer += "Content-Type: ";
+    write_buffer += mime_type(resource_path);
+    write_buffer += "\r\n";
     write_buffer += "Content-Length: " + std::to_string(file_stat.st_size) + "\r\n";
     write_buffer += "Connection: ";
     if (m_linger)
@@ -293,8 +307,17 @@ void Connection::make_file_response()
 
     iovs[0].iov_base = (void *)write_buffer.data();
     iovs[0].iov_len = write_buffer.length();
-    iovs[1].iov_base = file_address;
-    iovs[1].iov_len = file_stat.st_size;
+
+    if (compare_readbuffer_substr(m_method, "GET") == 0)
+    {
+        iovs[1].iov_base = file_address;
+        iovs[1].iov_len = file_stat.st_size;
+    }
+    else if (compare_readbuffer_substr(m_method, "HEAD") == 0)
+    {
+        iovs[1].iov_base = nullptr;
+        iovs[1].iov_len = 0;
+    }
 }
 
 void Connection::make_error_response(int code, const std::string &text, const std::string &msg)
@@ -338,62 +361,129 @@ void Connection::make_error_response(int code, const std::string &text, const st
     iovs[1].iov_len = error_body.length();
 }
 
-HttpCode Connection::do_request()
+void Connection::make_post_response()
 {
-    size_t len = strlen(resource_path);
-    if (read_buffer.compare(m_url.pos, m_url.len, "/") == 0)
+    post_body = read_buffer.substr(m_content.pos, m_content.len);
+    write_buffer += "HTTP/1.1 200 OK\r\n";
+    write_buffer += "Content-Type: text/plain\r\n";
+    write_buffer += "Content-Length: " + std::to_string(post_body.size()) + "\r\n";
+    write_buffer += "Connection: ";
+    if (m_linger)
     {
-        size_t copy_len = std::min(
-            strlen("/index.html"),
-            static_cast<size_t>(RESOURCE_PATH_MAXLEN - len - 1)
-        );
-        memcpy(resource_path + len, "/index.html", copy_len);
+        write_buffer += "keep-alive\r\n";
     }
     else
     {
-        size_t copy_len = std::min(
-            m_url.len,
-            static_cast<size_t>(RESOURCE_PATH_MAXLEN - len - 1)
-        );
-        memcpy(resource_path + len, read_buffer.data() + m_url.pos, copy_len);
+        write_buffer += "close\r\n";
     }
+    write_buffer += "\r\n";
 
-    if (stat(resource_path, &file_stat) < 0)
+    iovs[0].iov_base = (void *)write_buffer.data();
+    iovs[0].iov_len = write_buffer.length();
+    iovs[1].iov_base = (void *)post_body.data();
+    iovs[1].iov_len = post_body.length();
+    
+}
+
+HttpCode Connection::do_request()
+{
+    if (compare_readbuffer_substr(m_method, "POST") == 0)
     {
-        make_response(HttpCode::NO_RESOURCE);
-        return HttpCode::NO_RESOURCE;
+        //
+        //POST API
+        //
+
+        if (compare_readbuffer_substr(m_url, "/echo") == 0)
+        {  
+            make_response(HttpCode::ECHO_REQUEST);
+            return HttpCode::ECHO_REQUEST; 
+        }
+        else
+        {
+            make_response(HttpCode::BAD_REQUEST);
+            return HttpCode::BAD_REQUEST;
+        }
     }
-    if (S_ISDIR(file_stat.st_mode))
+    else
     {
-        make_response(HttpCode::BAD_REQUEST);
-        return HttpCode::BAD_REQUEST;
+        std::string url = read_buffer.substr(m_url.pos, m_url.len);
+        std::transform(url.begin(), url.end(), url.begin(), [](unsigned char c)
+                       { return std::tolower(c); });
+
+        auto check = [&url](const char *s)
+        {
+            size_t pos = url.find(s);
+            if (pos != std::string::npos)
+            {               
+                return true;
+            }
+            return false;
+        };
+
+        if (check("..") || check("%2e%2e"))
+        {
+            make_response(HttpCode::FORBIDDEN_REQUEST);
+            return HttpCode::FORBIDDEN_REQUEST;
+        }
+
+        size_t len = strlen(resource_path);
+        if (compare_readbuffer_substr(m_url, "/") == 0)
+        {
+            size_t copy_len = std::min(
+                strlen("/index.html"),
+                static_cast<size_t>(RESOURCE_PATH_MAXLEN - len - 1));
+            memcpy(resource_path + len, "/index.html", copy_len);
+        }
+    
+        else
+        {
+            size_t copy_len = std::min(
+                m_url.len,
+                static_cast<size_t>(RESOURCE_PATH_MAXLEN - len - 1)
+            );
+            memcpy(resource_path + len, read_buffer.data() + m_url.pos, copy_len);
+        }
+
+        if (stat(resource_path, &file_stat) < 0)
+        {
+            make_response(HttpCode::NO_RESOURCE);
+            return HttpCode::NO_RESOURCE;
+        }
+        if (S_ISDIR(file_stat.st_mode))
+        {
+            make_response(HttpCode::BAD_REQUEST);
+            return HttpCode::BAD_REQUEST;
+        }
+        if (!(file_stat.st_mode & S_IROTH))
+        {
+            make_response(HttpCode::FORBIDDEN_REQUEST);
+            return HttpCode::FORBIDDEN_REQUEST;
+        }
+
+        if (compare_readbuffer_substr(m_method, "GET") == 0)
+        {
+            int fd = open(resource_path, O_RDONLY);
+            if (fd < 0)
+            {
+                make_response(HttpCode::NO_RESOURCE);
+                return HttpCode::NO_RESOURCE;
+            }
+
+            file_address = (char *)
+                mmap(nullptr, file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+
+            close(fd);
+
+            if (file_address == MAP_FAILED)
+            {
+                make_response(HttpCode::INTERNAL_ERROR);
+                return HttpCode::INTERNAL_ERROR;
+            }
+        }
+
+        make_response(HttpCode::FILE_REQUEST);
+        return HttpCode::FILE_REQUEST;
     }
-    if (!(file_stat.st_mode & S_IROTH))
-    {
-        make_response(HttpCode::FORBIDDEN_REQUEST);
-        return HttpCode::FORBIDDEN_REQUEST;
-    }
-
-    int fd = open(resource_path, O_RDONLY);
-    if (fd < 0)
-    {
-        make_response(HttpCode::NO_RESOURCE);
-        return HttpCode::NO_RESOURCE;
-    }
-
-    file_address = (char *)
-        mmap(nullptr, file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-
-    close(fd);
-
-    if (file_address == MAP_FAILED)
-    {
-        make_response(HttpCode::INTERNAL_ERROR);
-        return HttpCode::INTERNAL_ERROR;
-    }
-
-    make_response(HttpCode::FILE_REQUEST);
-    return HttpCode::FILE_REQUEST;
 }
 
 WriteState Connection::process_write()
@@ -460,13 +550,18 @@ void Connection::reset_state()
 
     write_buffer.clear();
     error_body.clear();
+    post_body.clear();
 
     m_check_state = CheckState::REQUEST_LINE;
 
     check_index = 0;
     start_index = 0;
 
-    m_linger = false;
+    m_linger = true;
+
+    m_content_length = 0;
+
+    file_address = nullptr;
 
     char current_dir[CURRENT_PATH_MAXLEN];
     memset(current_dir, '\0', CURRENT_PATH_MAXLEN);
@@ -480,4 +575,73 @@ void Connection::reset_state()
         strcpy(resource_path, current_dir);
         strcpy(resource_path + strlen(current_dir), "/Resources");
     }
+}
+
+std::string Connection::mime_type(const std::string &path)
+{
+    size_t dot_pos = path.rfind('.');
+    if (dot_pos == std::string::npos)
+    {
+        return "application/octet-stream";
+    }
+    std::string type = path.substr(dot_pos);
+    std::transform(type.begin(), type.end(), type.begin(),
+                   [](unsigned char c)
+                   {
+                       return std::tolower(c);
+                   });
+
+    if (type == ".html" || type == ".htm")
+    {
+        return "text/html";
+    }
+    else if (type == ".css")
+    {
+        return "text/css";
+    }
+    else if (type == ".js")
+    {
+        return "application/javascript";
+    }
+    else if (type == ".png")
+    {
+        return "image/png";
+    }
+    else if (type == ".jpg" || type == ".jpeg")
+    {
+        return "image/jpeg";
+    }
+    else if (type == ".gif")
+    {
+        return "image/gif";
+    }
+    else if (type == ".ico")
+    {
+        return "image/x-icon";
+    }
+    else if (type == ".svg")
+    {
+        return "image/svg+xml";
+    }
+    else if (type == ".txt")
+    {
+        return "text/plain";
+    }
+    else if (type == ".json")
+    {
+        return "application/json";
+    }
+    else if (type == ".pdf")
+    {
+        return "application/pdf";
+    }
+    else
+    {
+        return "application/octet-stream";
+    }
+}
+
+int Connection::compare_readbuffer_substr(Substr substr, const char *s)
+{
+    return read_buffer.compare(substr.pos, substr.len, s);
 }

@@ -10,3 +10,6 @@ server:	main.cpp ./Connection/Connection.cpp ./ThreadPool/ThreadPool.cpp ./Timer
 
 clean:
 	rm -f *.o server
+
+clean-logs:
+	rm -f Logs/*.log

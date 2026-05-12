@@ -4,6 +4,8 @@
 #include <string>
 #include <cstring>
 #include <cstdlib>
+#include <cctype>
+#include <algorithm>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -29,12 +31,13 @@ enum class CheckState
 enum class HttpCode
 {
     NO_REQUEST,
-    GET_REQUEST,
+    REQUEST_READY,
     BAD_REQUEST,
     INTERNAL_ERROR,
     FORBIDDEN_REQUEST,
     NO_RESOURCE,
-    FILE_REQUEST
+    FILE_REQUEST,
+    ECHO_REQUEST
 };
 
 enum class ConnectionState
@@ -71,6 +74,8 @@ private:
 
     std::string error_body;
 
+    std::string post_body;
+
     CheckState m_check_state;
 
     int check_index;
@@ -83,7 +88,7 @@ private:
     bool m_linger;
     int m_content_length;
 
-    Substr m_content;
+    Substr m_content;         //body
 
     char resource_path[RESOURCE_PATH_MAXLEN];
     struct stat file_stat;
@@ -95,7 +100,7 @@ private:
 
     ConnectionState connection_state_;
 
-    int version_;
+    int version_ = 0;
 
 public:
     int prev_in_timerwheel;
@@ -128,6 +133,8 @@ public:
 
     void make_error_response(int code, const std::string &text, const std::string &msg);
 
+    void make_post_response();
+
     HttpCode do_request();
 
     WriteState process_write();
@@ -141,4 +148,8 @@ public:
     inline size_t read_buffer_len() { return read_buffer.length(); }
 
     inline int version() { return version_; }
+
+    std::string mime_type(const std::string &path);
+
+    int compare_readbuffer_substr(Substr substr, const char *s);
 };

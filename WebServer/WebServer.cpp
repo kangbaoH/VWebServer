@@ -146,6 +146,7 @@ void WebServer::start(int port, int thread_nums, int timeout, int max_connection
     close(timer_fd);
     close(listen_fd);
     close(epoll_fd);
+    Logger::instance().close();
 }
 
 void WebServer::close_connection(int fd)

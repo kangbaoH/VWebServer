@@ -41,6 +41,7 @@ void ThreadPool::init(int threads_num, int event_fd)
                                 break;
 
                             case HttpCode::FILE_REQUEST:
+                            case HttpCode::ECHO_REQUEST:
                             case HttpCode::NO_RESOURCE:
                             case HttpCode::FORBIDDEN_REQUEST:
                             case HttpCode::INTERNAL_ERROR:
