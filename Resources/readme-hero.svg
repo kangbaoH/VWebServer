@@ -1,0 +1,42 @@
+<svg width="1600" height="520" viewBox="0 0 1600 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">VWebServer</title>
+  <desc id="desc">A minimal README banner with the VWebServer project name.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1600" y2="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#07111F"/>
+      <stop offset="0.52" stop-color="#0B1220"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="text" x1="344" y1="216" x2="1257" y2="337" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F8FAFC"/>
+      <stop offset="0.45" stop-color="#7DD3FC"/>
+      <stop offset="1" stop-color="#86EFAC"/>
+    </linearGradient>
+    <linearGradient id="line" x1="472" y1="348" x2="1128" y2="348" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#38BDF8" stop-opacity="0"/>
+      <stop offset="0.18" stop-color="#38BDF8"/>
+      <stop offset="0.82" stop-color="#22C55E"/>
+      <stop offset="1" stop-color="#22C55E" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softGlow" x="260" y="70" width="1080" height="380" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+      <feGaussianBlur stdDeviation="22" result="effect1_foregroundBlur_1_1"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="520" rx="32" fill="url(#bg)"/>
+  <path d="M160 376C330 300 425 306 590 364C742 418 854 418 1014 356C1177 293 1282 292 1440 358" stroke="#1F2937" stroke-width="2"/>
+  <path d="M206 156C359 210 493 208 640 150C790 91 928 91 1082 150C1230 207 1360 205 1492 156" stroke="#1F2937" stroke-width="2"/>
+  <g filter="url(#softGlow)" opacity="0.45">
+    <ellipse cx="800" cy="260" rx="435" ry="118" fill="#38BDF8" fill-opacity="0.16"/>
+  </g>
+  <text x="800" y="303" text-anchor="middle"
+        font-family="Inter, Segoe UI, Arial, Helvetica, sans-serif"
+        font-size="116"
+        font-weight="800"
+        letter-spacing="2"
+        fill="url(#text)">VWebServer</text>
+  <rect x="472" y="344" width="656" height="8" rx="4" fill="url(#line)"/>
+  <circle cx="472" cy="348" r="5" fill="#38BDF8"/>
+  <circle cx="1128" cy="348" r="5" fill="#22C55E"/>
+</svg>
