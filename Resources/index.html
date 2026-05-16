@@ -1,76 +1,375 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VNotes</title>
-  <style>
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: Inter, "Noto Sans SC", "Microsoft YaHei", sans-serif;
-      background: #f6f8f5;
-      color: #173b2f;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VServer - C++ Web Server</title>
+    <style>
+        :root {
+            --bg: #080b10;
+            --panel: #101620;
+            --text: #e5edf7;
+            --muted: #8492a6;
+            --line: #243244;
+            --green: #36d399;
+            --blue: #38bdf8;
+            --purple: #a78bfa;
+        }
 
-    .card {
-      width: min(720px, 90%);
-      padding: 48px;
-      border-radius: 24px;
-      background: #ffffffcc;
-      border: 1px solid rgba(23, 59, 47, 0.12);
-      box-shadow: 0 20px 60px rgba(23, 59, 47, 0.08);
-    }
+        * {
+            box-sizing: border-box;
+        }
 
-    .tag {
-      display: inline-block;
-      margin-bottom: 18px;
-      padding: 6px 12px;
-      border-radius: 999px;
-      background: #e8ddaa;
-      font-size: 14px;
-      font-weight: 600;
-    }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at 20% 10%, rgba(56, 189, 248, 0.14), transparent 28%),
+                radial-gradient(circle at 80% 0%, rgba(167, 139, 250, 0.12), transparent 30%),
+                linear-gradient(180deg, #0b0f16 0%, var(--bg) 100%);
+            color: var(--text);
+        }
 
-    h1 {
-      margin: 0 0 16px;
-      font-size: 42px;
-      line-height: 1.15;
-    }
+        .grid-bg {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.28;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+            background-size: 42px 42px;
+            mask-image: linear-gradient(to bottom, black 0%, transparent 85%);
+        }
 
-    p {
-      margin: 0 0 28px;
-      max-width: 560px;
-      line-height: 1.8;
-      color: #4f655c;
-    }
+        .page {
+            position: relative;
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 34px 24px 70px;
+        }
 
-    a {
-      display: inline-block;
-      padding: 12px 20px;
-      border-radius: 999px;
-      background: #173b2f;
-      color: white;
-      text-decoration: none;
-      font-weight: 600;
-    }
+        nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 86px;
+        }
 
-    a:hover {
-      opacity: 0.9;
-    }
-  </style>
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            font-size: 20px;
+        }
+
+        .brand-mark {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--blue), var(--purple));
+            box-shadow: 0 0 28px rgba(56, 189, 248, 0.28);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 26px;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .nav-links a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .nav-links a:hover {
+            color: var(--text);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            padding: 9px 14px;
+            border: 1px solid rgba(54, 211, 153, 0.32);
+            border-radius: 999px;
+            background: rgba(54, 211, 153, 0.08);
+            color: #a7f3d0;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .pulse {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 0 6px rgba(54, 211, 153, 0.12);
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 34px;
+            align-items: center;
+        }
+
+        .eyebrow {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: var(--blue);
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-size: 13px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(46px, 8vw, 88px);
+            line-height: 0.92;
+            letter-spacing: -0.075em;
+        }
+
+        .gradient {
+            background: linear-gradient(90deg, var(--blue), var(--green), var(--purple));
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+
+        .subtitle {
+            max-width: 700px;
+            margin: 28px 0 0;
+            color: var(--muted);
+            font-size: 19px;
+            line-height: 1.85;
+        }
+
+        .actions {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin-top: 34px;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 13px 20px;
+            border-radius: 14px;
+            text-decoration: none;
+            font-weight: 800;
+            font-size: 14px;
+        }
+
+        .primary {
+            background: var(--text);
+            color: #05070b;
+        }
+
+        .secondary {
+            border: 1px solid var(--line);
+            color: var(--text);
+            background: rgba(16, 22, 32, 0.7);
+        }
+
+        .terminal {
+            border: 1px solid var(--line);
+            background: rgba(16, 22, 32, 0.84);
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+        }
+
+        .terminal-top {
+            height: 42px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 16px;
+            border-bottom: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .circle {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+        }
+
+        .red { background: #fb7185; }
+        .yellow { background: #facc15; }
+        .green { background: #36d399; }
+
+        .terminal-body {
+            padding: 22px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 13px;
+            line-height: 1.8;
+            color: #b6c2d0;
+        }
+
+        .cmd { color: #e5edf7; }
+        .ok { color: var(--green); }
+        .blue { color: var(--blue); }
+        .purple { color: var(--purple); }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px;
+            margin-top: 76px;
+        }
+
+        .card {
+            border: 1px solid var(--line);
+            background: rgba(16, 22, 32, 0.76);
+            border-radius: 24px;
+            padding: 26px;
+            min-height: 190px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.18);
+        }
+
+        .card-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            display: grid;
+            place-items: center;
+            margin-bottom: 22px;
+            font-weight: 900;
+            color: #05070b;
+        }
+
+        .icon-blue { background: var(--blue); }
+        .icon-green { background: var(--green); }
+        .icon-purple { background: var(--purple); }
+
+        .card h2 {
+            margin: 0 0 12px;
+            letter-spacing: -0.04em;
+            font-size: 23px;
+        }
+
+        .card p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.75;
+        }
+
+        footer {
+            margin-top: 70px;
+            padding-top: 26px;
+            border-top: 1px solid var(--line);
+            display: flex;
+            justify-content: space-between;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        @media (max-width: 900px) {
+            nav { margin-bottom: 52px; }
+            .nav-links { display: none; }
+            .hero, .cards { grid-template-columns: 1fr; }
+        }
+    </style>
 </head>
 <body>
-  <main class="card">
-    <span class="tag">Engineering Notes</span>
-    <h1>VNotes</h1>
-    <p>
-      一个用于整理 C++、Linux、数据库与 WebServer 项目记录的个人技术笔记站。
-    </p>
-    <a href="https://github.com/kangbaoH">View GitHub</a>
-  </main>
+    <div class="grid-bg"></div>
+
+    <main class="page">
+        <nav>
+            <div class="brand">
+                <div class="brand-mark"></div>
+                VServer
+            </div>
+
+            <div class="nav-links">
+                <a href="#">Overview</a>
+                <a href="/notes/index.html">Notes</a>
+            </div>
+
+            <div class="status-pill">
+                <span class="pulse"></span>
+                Server Online
+            </div>
+        </nav>
+
+        <section class="hero">
+            <div>
+                <span class="eyebrow">Linux · C++ · HTTP/1.1</span>
+                <h1>
+                    High Performance<br>
+                    <span class="gradient">C++ Web Server</span>
+                </h1>
+
+                <p class="subtitle">
+                    VServer 是一个从零实现的高性能 C++ Web Server，
+                    基于 epoll、线程池、HTTP 状态机、时间轮和异步日志系统构建，
+                    用于学习 Linux 网络编程与后端服务器核心机制。
+                </p>
+
+                <div class="actions">
+                    <a class="button primary" href="/index.html">View Home</a>
+                    <a class="button secondary" href="/notes/index.html">Project Notes</a>
+                </div>
+            </div>
+
+            <div class="terminal">
+                <div class="terminal-top">
+                    <span class="circle red"></span>
+                    <span class="circle yellow"></span>
+                    <span class="circle green"></span>
+                </div>
+                <div class="terminal-body">
+                    <div><span class="cmd">$ ./server --port 8080</span></div>
+                    <div class="ok">[INFO] Server is listening on Port 8080.</div>
+                    <div><span class="blue">epoll</span> reactor initialized</div>
+                    <div><span class="purple">threadpool</span> workers ready</div>
+                    <div><span class="ok">async logger</span> rotation enabled</div>
+                    <br>
+                    <div><span class="cmd">$ ab -n 100000 -c 500 -k /</span></div>
+                    <div class="ok">Failed requests: 0</div>
+                    <div class="blue">Keep-Alive requests: enabled</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cards">
+            <article class="card">
+                <div class="card-icon icon-blue">IO</div>
+                <h2>Reactor Core</h2>
+                <p>
+                    主线程基于 epoll 负责事件分发，使用非阻塞 I/O 处理高并发连接。
+                </p>
+            </article>
+
+            <article class="card">
+                <div class="card-icon icon-green">FSM</div>
+                <h2>HTTP Parser</h2>
+                <p>
+                    使用状态机解析请求行、请求头和请求体，支持半包、粘包、Pipeline 与 Keep-Alive。
+                </p>
+            </article>
+
+            <article class="card">
+                <div class="card-icon icon-purple">LOG</div>
+                <h2>Async Logger</h2>
+                <p>
+                    自定义异步日志系统，支持日志等级、时间戳、后台写入和日志滚动。
+                </p>
+            </article>
+        </section>
+
+        <footer>
+            <strong>VServer</strong>
+            <span>Served by C++ · epoll · HTTP/1.1 · Linux</span>
+        </footer>
+    </main>
 </body>
 </html>
