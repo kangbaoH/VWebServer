@@ -406,21 +406,12 @@ HttpCode Connection::do_request()
     }
     else
     {
-        std::string url = read_buffer.substr(m_url.pos, m_url.len);
+        std::string url;
+        url_decode(read_buffer.substr(m_url.pos, m_url.len), url);
         std::transform(url.begin(), url.end(), url.begin(), [](unsigned char c)
                        { return std::tolower(c); });
 
-        auto check = [&url](const char *s)
-        {
-            size_t pos = url.find(s);
-            if (pos != std::string::npos)
-            {               
-                return true;
-            }
-            return false;
-        };
-
-        if (check("..") || check("%2e%2e"))
+        if (url.find("..") != std::string::npos)
         {
             make_response(HttpCode::FORBIDDEN_REQUEST);
             return HttpCode::FORBIDDEN_REQUEST;
@@ -644,4 +635,52 @@ std::string Connection::mime_type(const std::string &path)
 int Connection::compare_readbuffer_substr(Substr substr, const char *s)
 {
     return read_buffer.compare(substr.pos, substr.len, s);
+}
+
+bool Connection::url_decode(const std::string &src, std::string &dst)
+{
+    dst.clear();
+
+    for (size_t i = 0; i < src.size(); i++)
+    {
+        if (src[i] == '%')
+        {
+            if (i + 2 >= src.size())
+            {
+                return false;
+            }
+
+            char h1 = src[i + 1];
+            char h2 = src[i + 2];
+
+            if (!std::isxdigit(static_cast<unsigned char>(h1)) ||
+                !std::isxdigit(static_cast<unsigned char>(h2)))
+            {
+                return false;
+            }
+
+            int high = std::isdigit(static_cast<unsigned char>(h1))
+                           ? h1 - '0'
+                           : std::tolower(static_cast<unsigned char>(h1)) - 'a' + 10;
+
+            int low = std::isdigit(static_cast<unsigned char>(h2))
+                          ? h2 - '0'
+                          : std::tolower(static_cast<unsigned char>(h2)) - 'a' + 10;
+
+            char decoded_char = static_cast<char>((high << 4) | low);
+            dst.push_back(decoded_char);
+
+            i += 2;
+        }
+        else if (src[i] == '+')
+        {
+            dst.push_back(' ');
+        }
+        else
+        {
+            dst.push_back(src[i]);
+        }
+    }
+
+    return true;
 }

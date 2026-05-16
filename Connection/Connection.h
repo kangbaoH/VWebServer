@@ -152,4 +152,6 @@ public:
     std::string mime_type(const std::string &path);
 
     int compare_readbuffer_substr(Substr substr, const char *s);
+
+    bool url_decode(const std::string &src, std::string &dst);
 };
